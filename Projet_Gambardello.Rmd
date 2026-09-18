@@ -1,0 +1,104 @@
+---
+title: 'Décomposition en valeurs singulières pour la reconstructions d''image '
+author: "Clara Gambardello"
+date: "2024-10-22"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("png")
+library("grid")
+```
+
+Lors de ce projet, nous souhaitons importer une photo dans R afin de réduire sa taille tout en conservant les détails de l'image visible a l'oeil nu. Pour ce faire nous utilisons R studio avec les packages "png" et "grid".
+
+Après avoir intallé et chargé ces deux packages nous importons notre image avec la fonction "readPNG" du package "png" et la nommons "photo" pour la suite de notre code. Nous avons décidé d'utiliser le package "grid" pour pouvoir afficher nos images dans la rubrique plot de R studio. Avec l'aide de la fonction grid.raster nous affichons notre photo orginiale en couleur.
+
+```{r,include=FALSE}
+photo=readPNG("Image.png")
+```
+
+```{r, echo=FALSE}
+grid.raster(photo)
+```
+
+Pour pouvoir effectuer notre réduction et reconstruction nous avons besoin de notre photo en noir et blanc et en niveau de gris pour chaque pixel. Pour cela, avec le document "Traitement d'image avec R" de Olivier Nocent, avec une combinaison linéaire des composantes rouge vert et bleu, nous utilisons les valeurs fournies par le site internet, voici le calcul que nous réalisons :
+
+$$
+\begin{pmatrix}
+r'\\
+g'\\
+b'
+\end{pmatrix}
+=
+\begin{pmatrix}
+0.2126 & 0.7152 & 0.0722 \\
+0.2126 & 0.7152 & 0.0722 \\
+0.2126 & 0.7152 & 0.0722
+\end{pmatrix}
+\begin{pmatrix}
+ r\\
+ g\\
+ b\\
+\end{pmatrix}
+$$
+
+```{r}
+photo=0.2126*photo[,,1]+0.7152*photo[,,2]+0.0722*photo[,,3]
+```
+
+Nous obtenons après affichage de notre nouvelle photo en noir et blanc :
+
+```{r, echo=FALSE}
+grid.raster(photo)
+```
+
+Notre photo étant vu comme une matrice de pixels en niveaux de gris nous pouvons calculer sa décomposition en valeurs singulières (SVD) dont le théoreme est le suivant :
+
+Soit A une matrice de taille n$\times$p et de rang 0 $\leq$ r $\leq min(n,p)$. Alors il existe U, $\Sigma$, V tq $$A = U \Sigma V^T $$ ou $U=(u_1 | ... | u_r)$ de rang r et $U^TU=I_r$ et $u_j$ s'appellent vecteur propre à gauche de A vérifiant $A^Tu_j=\sigma_jv_j$, $\Sigma = diag(\sigma_j)$ de rang r et $\sigma_j$ s'appelle valeur singuliére de A, $\sigma_j=\sqrt{\lambda_j}$, ou $\lambda_j$ sont les valeurs propres non nulle de $A^TA$ ou de $AA^T$. Enfin, $V=(v_1 |...|v_r)$ de rang r et $V^TV=I_r$ et $v_j$ s'appellent vecteur propre à droite de A vérifiant $Av_j=\sigma_ju_j$.
+
+Nous plaçons les matrices U et V ainsi que les valeurs singulières de la SVD dans des variables, elles nous serviront ensuite a reconstruire notre image.
+
+```{r, include=FALSE}
+#Calcul de la SVD de notre photo
+photo_svd=svd(photo)
+
+#Valeurs singulières
+valeurs_sing=photo_svd$d
+u_photo=photo_svd$u
+v_photo=photo_svd$v
+```
+
+Après affichage de nos valeurs singulières nos constatons que celles-ci sont déjà dans l'ordre décroissant, nous n'aurons plus qu'à transformer ce vecteur en une matrice diagonale a l'aide de la fonction "diag" de R
+
+```{r, include=FALSE}
+nb_valeur_garde=c(3,20, 50, 100, 200)
+```
+
+Nous souhaitons a présent reconstruire notre image en ne gardant qu'un certain nombre de valeurs singulières. Nous créons un vecteur contenant le nombre de valeurs singulières que nous voulons conserver pour chaque reconstrution. Afin de ne pas recopier les mêmes lignes de codes plusieurs fois, nous réalisons une boucle for, qui affichera notre photo reconstruite pour chaque nombre de valeurs singulières conservées.
+
+```{r}
+#Affichage pour chaque nombre de valeurs singulières choisies
+for (i in nb_valeur_garde){
+  new_photo=u_photo[,1:i]%*%diag(valeurs_sing[1:i])%*%t(v_photo[,1:i])
+  
+  #ajuster les valeurs plus grande que 1 et plus petite que O
+  new_photo=pmax(pmin(new_photo, 1), 0)
+  
+  #Affichage
+  grid.newpage()
+  grid.raster(new_photo)
+  print(paste("Photo avec", i, "valeurs singulières"))
+  
+}
+```
+
+Nous stockons dans new_photo la reconstruction de notre image, pour chaque nombre de valeurs singulières conservées, nous ne gardons dans les matrices U et V que les colonnes associées aux valeurs singulières que nous gardons. Après création de notre vecteur de valeurs singulières une matrice diagonale et transposition de la matrice V nous effectuons le produit matriciel des éléments de notre SVD que nous venons de modifier.
+
+Après avoir constaté que nos images ne s'affichaient pas en raison d'une erreur dans les valeurs de nos pixels, certainment a cause des arrondies effectué par la machine, en effet la fonction grid ne peut afficher en noir et blanc que des pixels dont la valeur se situe entre 0 et 1, nous utilisons la fonction pmin afin que les valeurs supérieurs a 1 soit réaffectées à 1 de même que nous utilisons la fonction pmax afin les valeurs négatives soit affectées à 0.
+
+Enfin nous affichons nos images reconstruites. Pour qu'elles s'affichent toutes et ne s'écrasent pas les unes les autres nous n'oublions pas de créer une nouvelle page a l'aide de la fonction grid.newpage. Nous décidons également de faire un print a la fin de chaque itération pour titré notre image et connaître le nombre de valeurs singulières qu'elle contient.
+
+Après de multiples tentatives en changeant le nombre de valeurs singulières a conserver nous arrivons a un résultat optimal avec 195 valeurs singulières au lieu des 3024 initiales. Notre nouvelle image est donc représenté par une matrice de dimension largement inférieur a l'originale.
